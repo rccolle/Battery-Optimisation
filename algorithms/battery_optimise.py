@@ -35,7 +35,9 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
-    
+    DAILY_CYCLE_LIMIT = 1.2 # Expressed as equivalent daily limit
+    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * (datetime.iloc[-1] - datetime.iloc[0]).days
+
     df = pd.DataFrame({'datetime': datetime, 'spot_price': spot_price}).reset_index(drop=True)
     df['period'] = df.index
     
@@ -52,6 +54,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     battery.Capacity = Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
     battery.Charge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
     battery.Discharge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.Cycles = Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
 
     # Set constraints for the battery
     # Defining the battery objective (function to be maximise)
@@ -85,28 +88,40 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
         # if not update the capacity normally    
         return battery.Capacity[i] == (battery.Capacity[i-1] 
                                         + (battery.Charge_power[i-1] / 2 * EFFICIENCY) 
-                                        - (battery.Discharge_power[i-1] / 2))
+                                        - (battery.Discharge_power[i-1] / 2 / EFFICIENCY))
+
+    # Defining battery cycling limit
+    def cycling_constraint(battery, i):
+        if i == battery.Period.first():
+            return battery.Cycles[i] == 0
+        return battery.Cycles[i] == (battery.Cycles[i-1]
+                                    + ((battery.Charge_power[i] / 2 * EFFICIENCY)
+                                       + (battery.Discharge_power[i] / 2)) / MAX_BATTERY_CAPACITY)
 
     # Set constraint and objective for the battery
     battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
     battery.over_charge = Constraint(battery.Period, rule=over_charge)
     battery.over_discharge = Constraint(battery.Period, rule=over_discharge)
     battery.negative_discharge = Constraint(battery.Period, rule=negative_discharge)
+    battery.cycling_constraint = Constraint(battery.Period, rule=cycling_constraint)
     battery.objective = Objective(rule=maximise_profit, sense=maximize)
 
     # Maximise the objective
     opt.solve(battery, tee=False)
 
     # unpack results
-    charge_power, discharge_power, capacity, spot_price = ([] for i in range(4))
+    charge_power, discharge_power, capacity, cycles, spot_price = ([] for i in range(5))
     for i in battery.Period:
         charge_power.append(battery.Charge_power[i].value)
         discharge_power.append(battery.Discharge_power[i].value)
         capacity.append(battery.Capacity[i].value)
+        cycles.append(battery.Cycles[i].value)
         spot_price.append(battery.Price.extract_values_sparse()[None][i])
 
-    result = pd.DataFrame({'datetime':datetime, 'spot_price':spot_price, 'charge_power':charge_power,
-                           'discharge_power':discharge_power, 'opening_capacity':capacity})
+    result = pd.DataFrame(index=datetime,
+                          data = {'spot_price':spot_price, 'charge_power':charge_power,
+                                  'discharge_power':discharge_power, 'opening_capacity':capacity,
+                                  'cycles': cycles})
     
     # make sure it does not discharge & charge at the same time
     if not len(result[(result.charge_power != 0) & (result.discharge_power != 0)]) == 0:
@@ -123,7 +138,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
                                          result.power / 2,
                                          result.power / 2 * EFFICIENCY)
     
-    result = result[['datetime', 'spot_price', 'power', 'market_dispatch', 'opening_capacity']]
+    result = result[['spot_price', 'power', 'market_dispatch', 'opening_capacity', 'cycles']]
     
     # calculate revenue
     if include_revenue:
