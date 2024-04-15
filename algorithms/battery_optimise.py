@@ -5,8 +5,6 @@ import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 from pyomo.environ import *
-from pyutilib.services import register_executable, registered_executable
-register_executable(name='glpsol')
 
 def battery_optimisation(datetime, spot_price, initial_capacity=0, include_revenue=True, solver: str='glpk'):
     """
@@ -40,8 +38,6 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     
     df = pd.DataFrame({'datetime': datetime, 'spot_price': spot_price}).reset_index(drop=True)
     df['period'] = df.index
-    initial_period = 0
-    final_period = df.index[-1]
     
     # Define model and solver
     battery = ConcreteModel()
