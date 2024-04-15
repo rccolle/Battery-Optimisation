@@ -59,7 +59,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     # Set constraints for the battery
     # Defining the battery objective (function to be maximise)
     def maximise_profit(battery):
-        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 2 * EFFICIENCY) * MLF for i in battery.Period)
+        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 2) * MLF for i in battery.Period)
         cost = sum(df.spot_price[i] * (battery.Charge_power[i] / 2) / MLF for i in battery.Period)
         return rev - cost
 
@@ -69,7 +69,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
 
     # Make sure the battery discharge the amount it actually has
     def over_discharge(battery, i):
-        return battery.Discharge_power[i] <= battery.Capacity[i] * 2
+        return battery.Discharge_power[i] <= battery.Capacity[i] * 2 * EFFICIENCY
 
     # Make sure the battery do not discharge when price are not positive
     def negative_discharge(battery, i):
