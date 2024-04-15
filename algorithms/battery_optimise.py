@@ -48,7 +48,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     battery.Period = Set(initialize=list(df.period), ordered=True)
     battery.Price = Param(initialize=list(df.spot_price), within=Any)
 
-    # battery varaibles
+    # battery variables
     battery.Capacity = Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
     battery.Charge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
     battery.Discharge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
