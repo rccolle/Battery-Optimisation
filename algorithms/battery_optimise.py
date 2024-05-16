@@ -60,17 +60,17 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     # Set constraints for the battery
     # Defining the battery objective (function to be maximise)
     def maximise_profit(battery):
-        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 2) * MLF for i in battery.Period)
-        cost = sum(df.spot_price[i] * (battery.Charge_power[i] / 2) / MLF for i in battery.Period)
+        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
+        cost = sum(df.spot_price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
         return rev - cost
 
     # Make sure the battery does not charge above the limit
     def over_charge(battery, i):
-        return battery.Charge_power[i] <= (MAX_BATTERY_CAPACITY - battery.Capacity[i]) * 2 / EFFICIENCY
+        return battery.Charge_power[i] <= (MAX_BATTERY_CAPACITY - battery.Capacity[i]) * 12 / EFFICIENCY
 
     # Make sure the battery discharge the amount it actually has
     def over_discharge(battery, i):
-        return battery.Discharge_power[i] <= battery.Capacity[i] * 2 * EFFICIENCY
+        return battery.Discharge_power[i] <= battery.Capacity[i] * 12 * EFFICIENCY
 
     # Make sure the battery do not discharge when price are not positive
     def negative_discharge(battery, i):
@@ -88,16 +88,16 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
             return battery.Capacity[i] == INITIAL_CAPACITY
         # if not update the capacity normally    
         return battery.Capacity[i] == (battery.Capacity[i-1] 
-                                        + (battery.Charge_power[i-1] / 2 * EFFICIENCY) 
-                                        - (battery.Discharge_power[i-1] / 2 / EFFICIENCY))
+                                        + (battery.Charge_power[i-1] / 12 * EFFICIENCY) 
+                                        - (battery.Discharge_power[i-1] / 12 / EFFICIENCY))
 
     # Defining battery cycling limit
     def cycling_constraint(battery, i):
         if i == battery.Period.first():
             return battery.Cycles[i] == 0
         return battery.Cycles[i] == (battery.Cycles[i-1]
-                                    + ((battery.Charge_power[i] / 2 * EFFICIENCY)
-                                       + (battery.Discharge_power[i] / 2)) / MAX_BATTERY_CAPACITY)
+                                    + ((battery.Charge_power[i] / 12 * EFFICIENCY)
+                                       + (battery.Discharge_power[i] / 12)) / MAX_BATTERY_CAPACITY)
 
     # Set constraint and objective for the battery
     battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
@@ -136,8 +136,8 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     
     # calculate market dispatch
     result['market_dispatch'] = np.where(result.power < 0,
-                                         result.power / 2,
-                                         result.power / 2 * EFFICIENCY)
+                                         result.power / 12,
+                                         result.power / 12 * EFFICIENCY)
     
     result = result[['spot_price', 'power', 'market_dispatch', 'opening_capacity', 'cycles']]
     
