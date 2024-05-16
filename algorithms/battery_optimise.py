@@ -5,8 +5,9 @@ import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 from pyomo.environ import *
+import highspy
 
-def battery_optimisation(datetime, spot_price, initial_capacity=0, include_revenue=True, solver: str='glpk'):
+def battery_optimisation(datetime, spot_price, initial_capacity=0, include_revenue=True, solver: str='appsi_highs'):
     """
     Determine the optimal charge and discharge behavior of a battery based 
     in Victoria. Assuming pure foresight of future spot prices over every 
