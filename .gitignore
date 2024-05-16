@@ -1,8 +1,7 @@
 line-profiler.html
 line-profiler.py
 BATTERY3 multiproc.ipynb
-algorithms/__pycache__/battery_optimise.cpython-312.pyc
-algorithms/__pycache__/check.cpython-312.pyc
-algorithms/__pycache__/algo_utils.cpython-312.pyc
+*.pyc
 result/result_perfect_foresight.csv
 algorithms/test_result.csv
+solver/
