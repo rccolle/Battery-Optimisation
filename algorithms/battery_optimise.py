@@ -97,7 +97,7 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
             return battery.Cycles[i] == 0
         return battery.Cycles[i] == (battery.Cycles[i-1]
                                     + ((battery.Charge_power[i] / 12 * EFFICIENCY)
-                                       + (battery.Discharge_power[i] / 12)) / MAX_BATTERY_CAPACITY)
+                                       + (battery.Discharge_power[i] / 12)) / 2 / MAX_BATTERY_CAPACITY)
 
     # Set constraint and objective for the battery
     battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
