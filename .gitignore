@@ -5,3 +5,5 @@ BATTERY3 multiproc.ipynb
 result/result_perfect_foresight.csv
 algorithms/test_result.csv
 solver/
+.DS_Store
+algorithms/test_result_highs.csv
