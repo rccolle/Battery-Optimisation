@@ -45,40 +45,40 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
     df['period'] = df.index
     
     # Define model and solver
-    battery = ConcreteModel()
-    opt = SolverFactory(solver)
+    battery = pyo.ConcreteModel()
+    opt = pyo.SolverFactory(solver)
 
     # defining components of the objective model
     # battery parameters
-    battery.Period = Set(initialize=list(df.period), ordered=True)
-    battery.Energy_Price = Param(initialize=list(df.energy_price), within=Any)
-    battery.FCAS_Raise_Price = Param(initialize=list(df.fcas_raise_price), within=Any)
-    battery.FCAS_Lower_Price = Param(initialize=list(df.fcas_lower_price), within=Any)
+    battery.Period = pyo.Set(initialize=list(df.period), ordered=True)
+    battery.Energy_Price = pyo.Param(initialize=list(df.energy_price), within=pyo.Any)
+    battery.FCAS_Raise_Price = pyo.Param(initialize=list(df.fcas_raise_price), within=pyo.Any)
+    battery.FCAS_Lower_Price = pyo.Param(initialize=list(df.fcas_lower_price), within=pyo.Any)
 
     # battery variables
-    battery.Capacity = Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
-    battery.Charge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.Discharge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.FCAS_Raise_enablement = Var(battery.Period, bounds=(0, MAX_FCAS_RAISE))
-    battery.FCAS_Lower_enablement = Var(battery.Period, bounds=(0, MAX_FCAS_LOWER))
-    battery.Cycles = Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
+    battery.Capacity = pyo.Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
+    battery.Charge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.Discharge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.FCAS_Raise_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_RAISE))
+    battery.FCAS_Lower_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_LOWER))
+    battery.Cycles = pyo.Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
 
     # Set constraints for the battery
     # Defining the battery objective (function to be maximised)
     def maximise_profit(battery):
         energy_revenue = sum(df.energy_price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
         energy_cost = sum(df.energy_price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
-        fcas_lower_revenue = sum(df.fcas_lower_price * (battery.FCAS_Lower_enablement[i] / 12) * MLF for i in battery.Period)
-        fcas_raise_revenue = sum(df.fcas_raise_price * (battery.FCAS_Raise_enablement[i] / 12) * MLF for i in battery.Period)
+        fcas_lower_revenue = sum(df.fcas_lower_price[i] * (battery.FCAS_Lower_enablement[i] / 12) * MLF for i in battery.Period)
+        fcas_raise_revenue = sum(df.fcas_raise_price[i] * (battery.FCAS_Raise_enablement[i] / 12) * MLF for i in battery.Period)
         return energy_revenue - energy_cost + fcas_lower_revenue + fcas_raise_revenue
 
     # Make sure the battery does not charge above the limit
     def over_charge(battery, i):
-        return battery.Charge_power[i] <= (MAX_BATTERY_CAPACITY - battery.Capacity[i]) * 12 / EFFICIENCY
+        return battery.Charge_power[i] + battery.FCAS_Lower_enablement[i] <= (MAX_BATTERY_CAPACITY - battery.Capacity[i]) * 12 / EFFICIENCY
 
     # Make sure the battery only discharges the amount it actually has
     def over_discharge(battery, i):
-        return battery.Discharge_power[i] <= battery.Capacity[i] * 12 * EFFICIENCY
+        return battery.Discharge_power[i] + battery.FCAS_Raise_enablement[i] <= battery.Capacity[i] * 12 * EFFICIENCY
 
     # Make sure the battery does not discharge when price is not positive
     def negative_discharge(battery, i):
@@ -87,7 +87,7 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
             return battery.Discharge_power[i] == 0
 
         # otherwise skip the current constraint    
-        return Constraint.Skip
+        return pyo.Constraint.Skip
 
     # Defining capacity rule for the battery
     def capacity_constraint(battery, i):
@@ -115,14 +115,14 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
         return battery.FCAS_Lower_enablement[i] + battery.Charge_power[i] <= MAX_RAW_POWER
 
     # Set constraint and objective for the battery
-    battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
-    battery.over_charge = Constraint(battery.Period, rule=over_charge)
-    battery.over_discharge = Constraint(battery.Period, rule=over_discharge)
-    battery.negative_discharge = Constraint(battery.Period, rule=negative_discharge)
-    battery.cycling_constraint = Constraint(battery.Period, rule=cycling_constraint)
-    battery.discharge_plus_raise_limit = Constraint(battery.Period, rule=discharge_plus_raise_limit)
-    battery.charge_plus_lower_limit = Constraint(battery.Period, rule=charge_plus_lower_limit)
-    battery.objective = Objective(rule=maximise_profit, sense=maximize)
+    battery.capacity_constraint = pyo.Constraint(battery.Period, rule=capacity_constraint)
+    battery.over_charge = pyo.Constraint(battery.Period, rule=over_charge)
+    battery.over_discharge = pyo.Constraint(battery.Period, rule=over_discharge)
+    battery.negative_discharge = pyo.Constraint(battery.Period, rule=negative_discharge)
+    battery.cycling_constraint = pyo.Constraint(battery.Period, rule=cycling_constraint)
+    battery.discharge_plus_raise_limit = pyo.Constraint(battery.Period, rule=discharge_plus_raise_limit)
+    battery.charge_plus_lower_limit = pyo.Constraint(battery.Period, rule=charge_plus_lower_limit)
+    battery.objective = pyo.Objective(rule=maximise_profit, sense=pyo.maximize)
 
     # Maximise the objective
     opt.solve(battery, tee=False)
@@ -135,6 +135,10 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
         capacity.append(battery.Capacity[i].value)
         cycles.append(battery.Cycles[i].value)
         energy_price.append(battery.Energy_Price.extract_values_sparse()[None][i])
+        fcas_raise_enablement.append(battery.FCAS_Raise_enablement[i].value)
+        fcas_lower_enablement.append(battery.FCAS_Lower_enablement[i].value)
+        fcas_raise_price.append(battery.FCAS_Raise_Price.extract_values_sparse()[None][i])
+        fcas_lower_price.append(battery.FCAS_Lower_Price.extract_values_sparse()[None][i])
 
     result = pd.DataFrame(index=datetime,
                           data = {'energy_price':energy_price, 'fcas_raise_price': fcas_raise_price, 'fcas_lower_price': fcas_lower_price,
