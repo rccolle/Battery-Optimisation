@@ -5,7 +5,7 @@ logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 import pyomo.environ as pyo
 
-def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_price, initial_capacity=0, include_revenue=True, solver: str='appsi_highs'):
+def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_price, initial_capacity=0, solver: str='appsi_highs'):
     """
     Determine the optimal charge and discharge behavior of a battery based 
     in Victoria. Assuming pure foresight of future spot prices over every 
@@ -144,24 +144,5 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
     # make sure it does not discharge & charge at the same time
     if not len(result[(result.charge_power != 0) & (result.discharge_power != 0)]) == 0:
         print('Ops! The battery discharges & charges concurrently, the result has been returned')
-        return result
-    
-    # convert columns charge_power & discharge_power to power
-    result['power'] = np.where((result.charge_power > 0), 
-                                -result.charge_power, 
-                                result.discharge_power)
-    
-    # calculate market dispatch
-    result['market_dispatch'] = np.where(result.power < 0,
-                                         result.power / 12,
-                                         result.power / 12 * EFFICIENCY)
-    
-    result = result[['energy_price', 'power', 'market_dispatch', 'opening_capacity', 'cycles']]
-    
-    # calculate revenue
-    if include_revenue:
-        result['revenue'] = np.where(result.market_dispatch < 0, 
-                              result.market_dispatch * result.energy_price / MLF,
-                              result.market_dispatch * result.energy_price * MLF)
-    
+      
     return result
