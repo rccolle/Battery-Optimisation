@@ -3,8 +3,7 @@ import pandas as pd
 import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
-from pyomo.environ import *
-import highspy
+import pyomo.environ as pyo
 
 def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_price, initial_capacity=0, include_revenue=True, solver: str='appsi_highs'):
     """
