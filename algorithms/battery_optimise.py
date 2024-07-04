@@ -128,7 +128,7 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
     opt.solve(battery, tee=False)
 
     # unpack results
-    charge_power, discharge_power, capacity, cycles, energy_price = ([] for i in range(5))
+    charge_power, discharge_power, fcas_raise_enablement, fcas_lower_enablement, capacity, cycles, energy_price, fcas_lower_price, fcas_raise_price = ([] for i in range(9))
     for i in battery.Period:
         charge_power.append(battery.Charge_power[i].value)
         discharge_power.append(battery.Discharge_power[i].value)
@@ -137,8 +137,11 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
         energy_price.append(battery.Energy_Price.extract_values_sparse()[None][i])
 
     result = pd.DataFrame(index=datetime,
-                          data = {'energy_price':energy_price, 'charge_power':charge_power,
-                                  'discharge_power':discharge_power, 'opening_capacity':capacity,
+                          data = {'energy_price':energy_price, 'fcas_raise_price': fcas_raise_price, 'fcas_lower_price': fcas_lower_price,
+                                  'charge_power':charge_power,
+                                  'discharge_power':discharge_power,
+                                  'fcas_raise_enablement': fcas_raise_enablement, 'fcas_lower_enablement': fcas_lower_enablement,
+                                  'opening_capacity':capacity,
                                   'cycles': cycles})
     
     # make sure it does not discharge & charge at the same time
