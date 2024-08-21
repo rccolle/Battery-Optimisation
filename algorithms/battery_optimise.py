@@ -16,24 +16,21 @@ def battery_optimisation(
         include_revenue=True, 
         solver: str='appsi_highs'):
     """
-    Determine the optimal charge and discharge behavior of a battery based 
-    in Victoria. Assuming pure foresight of future spot prices over every 
-    half-hour period to maximise the revenue.
-    PS: Assuming no degradation to the battery over the timeline and battery cannot
-        charge and discharge concurrently.
+    Determine optimal battery dispatch each five-minute period.
+    
     ----------
     Parameters
     ----------
     datetime        : a list of time stamp
     spot_price      : a list of spot price of the corresponding time stamp
-    initial_capacit : the initial capacity of the battery
-    include_revenue : a boolean indicates if return results should include revenue calculation
-    solver          : the name of the desire linear programming solver (eg. 'glpk', 'mosek', 'gurobi')
+    initial_capacity : the initial capacity of the battery
+    include_revenue : a boolean indicating if return results should include revenue calculation
+    solver          : the name of the desire linear programming solver (e.g. 'glpk', 'mosek', 'gurobi')
 
     Returns
     ----------
-    A dataframe that contains battery's opening capacity for each half-hour period, spot price
-    of each half-hour period and battery's raw power for each half-hour priod
+    A dataframe that contains battery's opening capacity, spot price, and raw power for each period
+
     """
     # Battery's technical specification
     MIN_BATTERY_CAPACITY = 0.0
