@@ -2,8 +2,7 @@ line-profiler.html
 line-profiler.py
 BATTERY3 multiproc.ipynb
 *.pyc
-result/result_perfect_foresight.csv
-algorithms/test_result.csv
 solver/
 .DS_Store
-algorithms/test_result_highs.csv
+result/*.csv
+result/*.xlsx
