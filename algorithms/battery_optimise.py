@@ -36,8 +36,8 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
-    DAILY_CYCLE_LIMIT = 1.2 # Expressed as equivalent daily limit
-    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * (datetime.iloc[-1] - datetime.iloc[0]).days
+    DAILY_CYCLE_LIMIT = 1.0 # Expressed as equivalent daily limit
+    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * ((datetime.iloc[-1] - datetime.iloc[0]).days + 1)
 
     df = pd.DataFrame({'datetime': datetime, 'spot_price': spot_price}).reset_index(drop=True)
     df['period'] = df.index
