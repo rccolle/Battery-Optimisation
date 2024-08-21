@@ -30,9 +30,8 @@ def battery_optimisation(datetime, spot_price, initial_capacity=0, include_reven
     """
     # Battery's technical specification
     MIN_BATTERY_CAPACITY = 0
-    MAX_BATTERY_CAPACITY = 580
-    MAX_BATTERY_POWER = 150
-    MAX_RAW_POWER = 300
+    MAX_BATTERY_CAPACITY = 10
+    MAX_RAW_POWER = 5
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
