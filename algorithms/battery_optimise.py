@@ -35,8 +35,8 @@ def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_pr
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
-    DAILY_CYCLE_LIMIT = 1.0 # Expressed as equivalent daily limit
-    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * ((datetime.iloc[-1] - datetime.iloc[0]).days + 1)
+    DAILY_CYCLE_LIMIT = 1.2 # Expressed as equivalent daily limit
+    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * (datetime.iloc[-1] - datetime.iloc[0]).days
 
     df = pd.DataFrame({'datetime': datetime,
                        'energy_price': energy_price,
