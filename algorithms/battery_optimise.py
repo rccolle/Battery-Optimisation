@@ -5,15 +5,7 @@ logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 import pyomo.environ as pyo
 
-def battery_optimisation(
-        datetime,
-        spot_price,
-        initial_capacity=0, 
-        cycle_cost = 0,
-        daily_cycle_limit = 1.0,
-        include_revenue=True, 
-        solver: str='appsi_highs'):
-
+def battery_optimisation(datetime, energy_price, fcas_lower_price, fcas_raise_price, initial_capacity=0, solver: str='appsi_highs'):
     """
     Determine the optimal charge and discharge behavior of a battery based 
     in Victoria. Assuming pure foresight of future spot prices over every 
@@ -35,15 +27,16 @@ def battery_optimisation(
     of each half-hour period and battery's raw power for each half-hour priod
     """
     # Battery's technical specification
-    MIN_BATTERY_CAPACITY = 0.0
-    MAX_BATTERY_CAPACITY = 10.0
-    MAX_RAW_POWER = 5.0
-
+    MIN_BATTERY_CAPACITY = 0
+    MAX_BATTERY_CAPACITY = 11
+    MAX_RAW_POWER = 5
+    MAX_FCAS_RAISE = 4
+    MAX_FCAS_LOWER = 4
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
-    DAILY_CYCLE_LIMIT = 2.0 # Expressed as equivalent daily limit
-    HORIZON_CYCLE_LIMIT = daily_cycle_limit * ((datetime.iloc[-1] - datetime.iloc[0]).days + 1)
+    DAILY_CYCLE_LIMIT = 1.0 # Expressed as equivalent daily limit
+    HORIZON_CYCLE_LIMIT = DAILY_CYCLE_LIMIT * ((datetime.iloc[-1] - datetime.iloc[0]).days + 1)
 
     df = pd.DataFrame({'datetime': datetime,
                        'energy_price': energy_price,
@@ -63,19 +56,21 @@ def battery_optimisation(
     battery.FCAS_Lower_Price = pyo.Param(initialize=list(df.fcas_lower_price), within=pyo.Any)
 
     # battery variables
-    battery.Capacity = Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
-    battery.Charge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.Discharge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.Cycles = Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
-    battery.Cycle_cost = Var(battery.Period)
+    battery.Capacity = pyo.Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
+    battery.Charge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.Discharge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.FCAS_Raise_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_RAISE))
+    battery.FCAS_Lower_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_LOWER))
+    battery.Cycles = pyo.Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
 
     # Set constraints for the battery
     # Defining the battery objective (function to be maximised)
     def maximise_profit(battery):
-        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
-        cost = sum(df.spot_price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
-        cost += sum(battery.Cycle_cost[i] for i in battery.Period)
-        return rev - cost
+        energy_revenue = sum(df.energy_price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
+        energy_cost = sum(df.energy_price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
+        fcas_lower_revenue = sum(df.fcas_lower_price[i] * (battery.FCAS_Lower_enablement[i] / 12) * MLF for i in battery.Period)
+        fcas_raise_revenue = sum(df.fcas_raise_price[i] * (battery.FCAS_Raise_enablement[i] / 12) * MLF for i in battery.Period)
+        return energy_revenue - energy_cost + fcas_lower_revenue + fcas_raise_revenue
 
     # Make sure the battery does not charge above the limit
     def over_charge(battery, i):
@@ -110,14 +105,7 @@ def battery_optimisation(
             return battery.Cycles[i] == 0
         return battery.Cycles[i] == (battery.Cycles[i-1]
                                     + ((battery.Charge_power[i] / 12 * EFFICIENCY)
-                                       + (battery.Discharge_power[i] / 12 / EFFICIENCY)) / 2 / MAX_BATTERY_CAPACITY)
-    
-    # Define cycle cost
-    def incurred_cycle_cost(battery, i):
-        if i == battery.Period.first():
-            return battery.Cycle_cost[i] == battery.Cycles[i] * cycle_cost
-        return battery.Cycle_cost[i] == cycle_cost * (battery.Cycles[i] - battery.Cycles[i-1])
-        
+                                       + (battery.Discharge_power[i] / 12)) / 2 / MAX_BATTERY_CAPACITY)
 
     # Energy + FCAS enablement should not exceed battery capacity
     def discharge_plus_raise_limit(battery, i):
@@ -127,14 +115,14 @@ def battery_optimisation(
         return battery.FCAS_Lower_enablement[i] + battery.Charge_power[i] <= MAX_RAW_POWER
 
     # Set constraint and objective for the battery
-    battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
-    battery.over_charge = Constraint(battery.Period, rule=over_charge)
-    battery.over_discharge = Constraint(battery.Period, rule=over_discharge)
-    battery.negative_discharge = Constraint(battery.Period, rule=negative_discharge)
-    battery.cycling_constraint = Constraint(battery.Period, rule=cycling_constraint)
-    battery.cycle_cost_incurred = Constraint(battery.Period, rule=incurred_cycle_cost)
-
-    battery.objective = Objective(rule=maximise_profit, sense=maximize)
+    battery.capacity_constraint = pyo.Constraint(battery.Period, rule=capacity_constraint)
+    battery.over_charge = pyo.Constraint(battery.Period, rule=over_charge)
+    battery.over_discharge = pyo.Constraint(battery.Period, rule=over_discharge)
+    battery.negative_discharge = pyo.Constraint(battery.Period, rule=negative_discharge)
+    battery.cycling_constraint = pyo.Constraint(battery.Period, rule=cycling_constraint)
+    battery.discharge_plus_raise_limit = pyo.Constraint(battery.Period, rule=discharge_plus_raise_limit)
+    battery.charge_plus_lower_limit = pyo.Constraint(battery.Period, rule=charge_plus_lower_limit)
+    battery.objective = pyo.Objective(rule=maximise_profit, sense=pyo.maximize)
 
     # Maximise the objective
     opt.solve(battery, tee=False)
@@ -162,21 +150,6 @@ def battery_optimisation(
     
     # make sure it does not discharge & charge at the same time
     if not len(result[(result.charge_power != 0) & (result.discharge_power != 0)]) == 0:
-        print('Oops! The battery discharges & charges concurrently, the result has been returned')
-        return result
-    
-    # convert columns charge_power & discharge_power to power
-    result['power'] = np.where((result.charge_power > 0), 
-                                -result.charge_power, 
-                                result.discharge_power)
-
-    
-    result = result[['spot_price', 'power', 'opening_capacity', 'cycles']]
-    
-    # calculate revenue
-    if include_revenue:
-        result['revenue'] = np.where(result.power < 0,
-                                     result.power * result.spot_price / MLF,
-                                     result.power * result.spot_price * MLF) / 12
-
+        print('Ops! The battery discharges & charges concurrently, the result has been returned')
+      
     return result
