@@ -5,7 +5,6 @@ import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 from pyomo.environ import *
-import highspy
 
 def battery_optimisation(
         datetime,
