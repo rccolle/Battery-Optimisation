@@ -9,7 +9,8 @@ from pyomo.environ import *
 def battery_optimisation(
         datetime,
         spot_price,
-        initial_capacity=0, 
+        initial_capacity = 0, 
+        initial_cycles = 0,
         cycle_cost = 0,
         daily_cycle_limit = 1.0,
         include_revenue=True, 
@@ -38,7 +39,6 @@ def battery_optimisation(
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
-    DAILY_CYCLE_LIMIT = 2.0 # Expressed as equivalent daily limit
     HORIZON_CYCLE_LIMIT = daily_cycle_limit * ((datetime.iloc[-1] - datetime.iloc[0]).days + 1)
 
     df = pd.DataFrame({'datetime': datetime, 'spot_price': spot_price}).reset_index(drop=True)
@@ -98,7 +98,7 @@ def battery_optimisation(
     # Defining battery cycling limit
     def cycling_constraint(battery, i):
         if i == battery.Period.first():
-            return battery.Cycles[i] == 0
+            return battery.Cycles[i] == initial_cycles
         return battery.Cycles[i] == (battery.Cycles[i-1]
                                     + ((battery.Charge_power[i] / 12 * EFFICIENCY)
                                        + (battery.Discharge_power[i] / 12 / EFFICIENCY)) / 2 / MAX_BATTERY_CAPACITY)
@@ -146,9 +146,15 @@ def battery_optimisation(
     result['power'] = np.where((result.charge_power > 0), 
                                 -result.charge_power, 
                                 result.discharge_power)
+    
+
+    # Determine closing capacity
+    result['closing_capacity'] = (result['opening_capacity'] 
+                                        + (result['charge_power'] / 12 * EFFICIENCY) 
+                                        - (result['discharge_power'] / 12 / EFFICIENCY))
 
     
-    result = result[['spot_price', 'power', 'opening_capacity', 'cycles']]
+    result = result[['spot_price', 'power', 'opening_capacity', 'closing_capacity', 'cycles']]
     
     # calculate revenue
     if include_revenue:
