@@ -1,0 +1,6 @@
+# Environment YAML file for Databricks
+client: "1"
+dependencies:
+  - --index-url https://pypi.org/simple
+  - pyomo==6.8.*
+  - highspy
