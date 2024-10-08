@@ -36,6 +36,8 @@ def battery_optimisation(
     MIN_BATTERY_CAPACITY = 0.0
     MAX_BATTERY_CAPACITY = 10.0
     MAX_RAW_POWER = 5.0
+    MAX_FCAS_RAISE = 4
+    MAX_FCAS_LOWER = 4
     INITIAL_CAPACITY = initial_capacity # Default initial capacity will assume to be 0
     EFFICIENCY = 0.9
     MLF = 0.991 # Marginal Loss Factor
@@ -51,22 +53,28 @@ def battery_optimisation(
     # defining components of the objective model
     # battery parameters
     battery.Period = pyo.Set(initialize=list(df.period), ordered=True)
-    battery.Price = pyo.Param(initialize=list(df.spot_price), within=pyo.Any)
+    battery.Energy_Price = pyo.Param(initialize=list(df.spot_price), within=pyo.Any)
+    battery.FCAS_Raise_Price = pyo.Param(initialize=list(df.fcas_raise_price), within=pyo.Any)
+    battery.FCAS_Lower_Price = pyo.Param(initialize=list(df.fcas_lower_price), within=pyo.Any)
 
     # battery variables
     battery.Capacity = pyo.Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
     battery.Charge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
     battery.Discharge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.FCAS_Raise_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_RAISE))
+    battery.FCAS_Lower_enablement = pyo.Var(battery.Period, bounds=(0, MAX_FCAS_LOWER))
     battery.Cycles = pyo.Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
     battery.Cycle_cost = pyo.Var(battery.Period)
 
     # Set constraints for the battery
     # Defining the battery objective (function to be maximise)
     def maximise_profit(battery):
-        rev = sum(df.spot_price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
-        cost = sum(df.spot_price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
-        cost += sum(battery.Cycle_cost[i] for i in battery.Period)
-        return rev - cost
+        energy_revenue = sum(battery.Energy_Price[i] * (battery.Discharge_power[i] / 12) * MLF for i in battery.Period)
+        fcas_raise_revenue  = sum(battery.FCAS_Raise_Price[i] * (battery.FCAS_Raise_enablement[i] / 12) * MLF for i in battery.Period)
+        fcas_lower_revenue = sum(battery.FCAS_Lower_Price[i] * (battery.FCAS_Lower_enablement[i] / 12) * MLF for i in battery.Period)
+        energy_cost = sum(battery.Energy_Price[i] * (battery.Charge_power[i] / 12) / MLF for i in battery.Period)
+        cycle_cost = sum(battery.Cycle_cost[i] for i in battery.Period)
+        return energy_revenue - energy_cost - cycle_cost + fcas_raise_revenue + fcas_lower_revenue
 
     # Make sure the battery does not charge above the limit
     def over_charge(battery, i):
@@ -79,7 +87,7 @@ def battery_optimisation(
     # Make sure the battery do not discharge when price are not positive
     def negative_discharge(battery, i):
         # if the spot price is not positive, suppress discharge
-        if battery.Price.extract_values_sparse()[None][i] <= 0:
+        if battery.Energy_Price.extract_values_sparse()[None][i] <= 0:
             return battery.Discharge_power[i] == 0
 
         # otherwise skip the current constraint    
@@ -108,8 +116,14 @@ def battery_optimisation(
         if i == battery.Period.first():
             return battery.Cycle_cost[i] == battery.Cycles[i] * cycle_cost
         return battery.Cycle_cost[i] == cycle_cost * (battery.Cycles[i] - battery.Cycles[i-1])
+    
+    # Energy + FCAS enablement should not exceed battery capacity
+    def discharge_plus_raise_limit(battery, i):
+        return battery.FCAS_Raise_enablement[i] + battery.Discharge_power[i] <= MAX_RAW_POWER
+    
+    def charge_plus_lower_limit(battery, i):
+        return battery.FCAS_Lower_enablement[i] + battery.Charge_power[i] <= MAX_RAW_POWER
         
-
     # Set constraint and objective for the battery
     battery.capacity_constraint = pyo.Constraint(battery.Period, rule=capacity_constraint)
     battery.over_charge = pyo.Constraint(battery.Period, rule=over_charge)
@@ -117,24 +131,32 @@ def battery_optimisation(
     battery.negative_discharge = pyo.Constraint(battery.Period, rule=negative_discharge)
     battery.cycling_constraint = pyo.Constraint(battery.Period, rule=cycling_constraint)
     battery.cycle_cost_incurred = pyo.Constraint(battery.Period, rule=incurred_cycle_cost)
-
+    battery.discharge_plus_raise_limit = pyo.Constraint(battery.Period, rule=discharge_plus_raise_limit)
+    battery.charge_plus_lower_limit = pyo.Constraint(battery.Period, rule=charge_plus_lower_limit)
     battery.objective = pyo.Objective(rule=maximise_profit, sense=pyo.maximize)
 
     # Maximise the objective
     opt.solve(battery, tee=False)
 
     # unpack results
-    charge_power, discharge_power, capacity, cycles, spot_price = ([] for i in range(5))
+    charge_power, discharge_power, fcas_raise_enablement, fcas_lower_enablement, capacity, cycles, energy_price, fcas_lower_price, fcas_raise_price = ([] for i in range(9))
     for i in battery.Period:
         charge_power.append(battery.Charge_power[i].value)
         discharge_power.append(battery.Discharge_power[i].value)
         capacity.append(battery.Capacity[i].value)
         cycles.append(battery.Cycles[i].value)
-        spot_price.append(battery.Price.extract_values_sparse()[None][i])
+        energy_price.append(battery.Energy_Price.extract_values_sparse()[None][i])
+        fcas_raise_enablement.append(battery.FCAS_Raise_enablement[i].value)
+        fcas_lower_enablement.append(battery.FCAS_Lower_enablement[i].value)
+        fcas_raise_price.append(battery.FCAS_Raise_Price.extract_values_sparse()[None][i])
+        fcas_lower_price.append(battery.FCAS_Lower_Price.extract_values_sparse()[None][i])
 
     result = pd.DataFrame(index=datetime,
-                          data = {'spot_price':spot_price, 'charge_power':charge_power,
-                                  'discharge_power':discharge_power, 'opening_capacity':capacity,
+                          data = {'energy_price':energy_price, 'fcas_raise_price': fcas_raise_price, 'fcas_lower_price': fcas_lower_price,
+                                  'charge_power':charge_power,
+                                  'discharge_power':discharge_power,
+                                  'fcas_raise_enablement': fcas_raise_enablement, 'fcas_lower_enablement': fcas_lower_enablement,
+                                  'opening_capacity':capacity,
                                   'cycles': cycles})
     
     # make sure it does not discharge & charge at the same time
