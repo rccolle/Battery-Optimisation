@@ -1,0 +1,8 @@
+line-profiler.html
+line-profiler.py
+BATTERY3 multiproc.ipynb
+*.pyc
+solver/
+.DS_Store
+result/*.csv
+result/*.xlsx
