@@ -4,7 +4,7 @@ import numpy as np
 import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
-from pyomo.environ import *
+import pyomo.environ as pyo
 
 def battery_optimisation(
         datetime,
@@ -45,20 +45,20 @@ def battery_optimisation(
     df['period'] = df.index
     
     # Define model and solver
-    battery = ConcreteModel()
-    opt = SolverFactory(solver)
+    battery = pyo.ConcreteModel()
+    opt = pyo.SolverFactory(solver)
 
     # defining components of the objective model
     # battery parameters
-    battery.Period = Set(initialize=list(df.period), ordered=True)
-    battery.Price = Param(initialize=list(df.spot_price), within=Any)
+    battery.Period = pyo.Set(initialize=list(df.period), ordered=True)
+    battery.Price = pyo.Param(initialize=list(df.spot_price), within=pyo.Any)
 
     # battery variables
-    battery.Capacity = Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
-    battery.Charge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.Discharge_power = Var(battery.Period, bounds=(0, MAX_RAW_POWER))
-    battery.Cycles = Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
-    battery.Cycle_cost = Var(battery.Period)
+    battery.Capacity = pyo.Var(battery.Period, bounds=(MIN_BATTERY_CAPACITY, MAX_BATTERY_CAPACITY))
+    battery.Charge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.Discharge_power = pyo.Var(battery.Period, bounds=(0, MAX_RAW_POWER))
+    battery.Cycles = pyo.Var(battery.Period, bounds=(0, HORIZON_CYCLE_LIMIT))
+    battery.Cycle_cost = pyo.Var(battery.Period)
 
     # Set constraints for the battery
     # Defining the battery objective (function to be maximise)
@@ -83,7 +83,7 @@ def battery_optimisation(
             return battery.Discharge_power[i] == 0
 
         # otherwise skip the current constraint    
-        return Constraint.Skip
+        return pyo.Constraint.Skip
 
     # Defining capacity rule for the battery
     def capacity_constraint(battery, i):
@@ -111,14 +111,14 @@ def battery_optimisation(
         
 
     # Set constraint and objective for the battery
-    battery.capacity_constraint = Constraint(battery.Period, rule=capacity_constraint)
-    battery.over_charge = Constraint(battery.Period, rule=over_charge)
-    battery.over_discharge = Constraint(battery.Period, rule=over_discharge)
-    battery.negative_discharge = Constraint(battery.Period, rule=negative_discharge)
-    battery.cycling_constraint = Constraint(battery.Period, rule=cycling_constraint)
-    battery.cycle_cost_incurred = Constraint(battery.Period, rule=incurred_cycle_cost)
+    battery.capacity_constraint = pyo.Constraint(battery.Period, rule=capacity_constraint)
+    battery.over_charge = pyo.Constraint(battery.Period, rule=over_charge)
+    battery.over_discharge = pyo.Constraint(battery.Period, rule=over_discharge)
+    battery.negative_discharge = pyo.Constraint(battery.Period, rule=negative_discharge)
+    battery.cycling_constraint = pyo.Constraint(battery.Period, rule=cycling_constraint)
+    battery.cycle_cost_incurred = pyo.Constraint(battery.Period, rule=incurred_cycle_cost)
 
-    battery.objective = Objective(rule=maximise_profit, sense=maximize)
+    battery.objective = pyo.Objective(rule=maximise_profit, sense=pyo.maximize)
 
     # Maximise the objective
     opt.solve(battery, tee=False)
